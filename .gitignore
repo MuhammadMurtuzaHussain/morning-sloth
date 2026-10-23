@@ -1,0 +1,8 @@
+eval/data/
+eval/results/
+eval/results-heldout/
+app/secrets.env
+app/.state/
+app/fake_inbox.jsonl
+app/contacts.json
+__pycache__/
