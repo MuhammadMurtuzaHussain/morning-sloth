@@ -1,6 +1,6 @@
 eval/data/
 eval/results/
-eval/results-heldout/
+eval/results-*/
 app/secrets.env
 app/.state/
 app/fake_inbox.jsonl

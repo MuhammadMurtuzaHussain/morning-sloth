@@ -41,7 +41,29 @@ Gemma 4 E2B "thinks" by default and spent its whole answer budget on reasoning, 
 - A broader "any real person wrote" rule caught more but woke the sloth for 14 emails it shouldn't have, so it was dropped.
 - The biggest held-out miss was GitHub's "Possible valid secrets detected" alert, which Gemma called noise. That's why prompt v2 adds a line about security problems with your own accounts or code.
 
-<!-- RESULTS_V2 -->
+## Prompt v2: the security line (what the device runs now)
+
+Prompt v2 adds one clause to `needs_today`: *a security problem with their own accounts or code (leaked keys or secrets, a sign-in they did not make)*. Both sets were re-run on the board through the device's own Gemma server.
+
+| | Design: exact | Design: wake vs. quiet | Design: today caught | Held-out: exact | Held-out: wake vs. quiet | Held-out: today caught |
+|---|---|---|---|---|---|---|
+| Gemma alone | 72% | 86% | 1/6 | 60% | 95% | 1/3 |
+| + bill, delivery and starting-now rules | 76% | 91% | 5/6 | 60% | 95% | 1/3 |
+| **+ people you've written to (the device)** | **74%** | **88%** | **5/6** | **60%** | **98%** | **1/3, and all 3 wake it** |
+
+On the held-out days, every email that needed me that day wakes the sloth:
+
+- GitHub's leaked-secrets alert, which v1 called noise, is now **needs_today**.
+- An event "starting in 1 hour" moved from needs_today to **soon**. The sloth still wakes, with one eye instead of two.
+- A direct request for slides is raised to **soon** by the people-you've-written-to rule.
+
+The one remaining held-out miss is an automated support-ticket follow-up about my own payment card, which Gemma called fyi. The extra security wording didn't turn ordinary sign-in notices into false alarms: the Ko-fi, Stripe, Luma and Steam sign-in emails all stayed quiet. Exact agreement on the held-out set fell from 64% to 60%, mostly from shuffling between `fyi` and `noise`, which both mean asleep.
+
+Median time per email on the board: 34.5 seconds.
+
+## The setup cap, on the live inbox
+
+Connecting the sloth to Gmail sent three Google alerts: password changed, 2-Step Verification on, and an app password created "for Morning Sloth". Gemma marked both "Security alert" emails `needs_today`. The setup cap in `floors.py` brought them down to `fyi`, and the sloth stayed awake only for the real reasons that night: a failed electricity top-up and a parcel out for delivery.
 
 ## Gmail's own Important label, for comparison
 

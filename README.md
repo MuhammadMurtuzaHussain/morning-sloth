@@ -60,7 +60,14 @@ Two hand-labelled sets of my real email: 91 from 19 to 22 October, which I used 
 | Gemma 3 1B | 12% | 21% | 2/6 | 39 s/email |
 | **Gemma 4 E2B** | **69%** | **86%** | 1/6 | 34 s/email |
 
-<!-- RESULTS_V2 -->
+**What the device runs** (Gemma 4 E2B, prompt v2 with the security line, plus all the rules):
+
+| | Exact | Wake vs. quiet | Caught needs_today | False wakes |
+|---|---|---|---|---|
+| Design set (85) | 74% | 88% | 5/6 | 7 |
+| **Held-out set (42)** | **60%** | **98%** | **1/3 exact, 3/3 wake it** | **0** |
+
+On the held-out days, the leaked-secrets alert from GitHub wakes it fully, and an event starting in an hour and a request for slides each open one eye. Ordinary sign-in notices stay quiet. The one held-out miss is an automated support-ticket follow-up.
 
 The full numbers, misses included, are in [`eval/RESULTS.md`](eval/RESULTS.md). The labelled email itself stays private and is never committed.
 
@@ -115,7 +122,7 @@ python3 -m unittest discover tests
 ## Honest limits
 
 - **The countdown is timetable time, not live.** Live bus positions need a Transport for Ireland developer key, and getting one needs an account.
-- **Security alerts are hard.** Gemma can't tell a sign-in you made from one you didn't, so most "new sign-in" emails wake the sloth until you read them.
+- **Security alerts are hard.** Gemma can't tell a sign-in you made from one you didn't. In testing it left ordinary "new sign-in" notices quiet, which is right almost every time, but it means a real intruder's sign-in notice might not wake it either. Leaked-key alerts do wake it.
 - **The rules were written after seeing the first set.** That's why the held-out set exists, and why its numbers are the ones to trust.
 - **It's slow, by design.** About 35 seconds per email on the board's CPU. Ten emails overnight take six minutes, while you're asleep anyway.
 
