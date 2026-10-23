@@ -112,6 +112,8 @@ class Sloth:
     def tick(self):
         self.refresh_contacts()
         mail = self.unread()
+        with self.lock:
+            self.last_ok = time.time()
         anchor = setup_anchor(mail)
         if anchor and anchor != self.setup_at:
             self.setup_at = anchor
@@ -129,11 +131,23 @@ class Sloth:
             if fresh:
                 print(f"{seconds:5.1f}s {self.labels[key]:>11} -> {final[key]:<11} "
                       f"{msg['sender']} | {msg['subject'][:50]}", flush=True)
+                # Each email takes Gemma half a minute, so wake as soon as one matters
+                # instead of after the whole pass
+                self.show(max(final.values(), key=RANK.get), raise_only=True)
         top = max(final.values(), key=RANK.get, default="noise")
-        with self.lock:
-            self.level = FACE_FOR.get(top, "asleep")
-            self.last_ok = time.time()
+        self.show(top)
+        # Only mail that's still unread can change the face
+        self.labels = {k: self.labels[k] for k in final}
+        self.labels_path.write_text(json.dumps(self.labels))
         print(f"{len(mail)} unread, strongest: {top} -> {self.level}", flush=True)
+
+    def show(self, label, raise_only=False):
+        face = FACE_FOR.get(label, "asleep")
+        order = ["asleep", "peek", "awake"]
+        with self.lock:
+            if not raise_only or order.index(face) > order.index(self.level):
+                self.level = face
+            self.last_ok = time.time()
 
     def run(self):
         while True:
