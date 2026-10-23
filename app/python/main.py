@@ -168,7 +168,9 @@ class Sloth:
     def bus_frame(self):
         """A countdown frame while it's bus time, otherwise an empty string."""
         now = irishtime.now()
-        if self.timetable is None or not between(now, self.settings["BUS_FROM"], self.settings["BUS_TO"]):
+        if (self.timetable is None
+                or between(now, self.settings["QUIET_FROM"], self.settings["WAKE_AT"])
+                or not between(now, self.settings["BUS_FROM"], self.settings["BUS_TO"])):
             return ""
         minutes = bus.minutes_to_leave(self.timetable, now, int(self.settings["BUS_WALK_MINUTES"]))
         if minutes != self.last_bus:
