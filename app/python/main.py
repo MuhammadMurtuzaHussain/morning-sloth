@@ -9,7 +9,8 @@ timetable in bus_timetable.json, corrected by the live feed when TFI_API_KEY is 
 
 Settings live in secrets.env next to app.yaml (never committed):
   GMAIL_USER, GMAIL_APP_PASSWORD, QUIET_FROM=00:30, WAKE_AT=07:00, POLL_MINUTES=5,
-  BUS_FROM=09:00, BUS_TO=12:00, BUS_WALK_MINUTES=0, TFI_API_KEY, LIVE_MINUTES=2
+  BUS_FROM=09:00, BUS_TO=12:00, BUS_WALK_MINUTES=0, TFI_API_KEY, LIVE_MINUTES=2,
+  EXTRA_CONTACTS=a@x.com,b@y.com (always count as people you've written to)
 With no Gmail settings, it reads fake_inbox.jsonl instead, for testing.
 """
 import json
@@ -109,6 +110,8 @@ class Sloth:
             self.replied_to = frozenset(self.gmail.replied_to())
         elif (ROOT / "contacts.json").exists():
             self.replied_to = frozenset(json.loads((ROOT / "contacts.json").read_text())["replied_to"])
+        extra = {a.strip().lower() for a in self.settings.get("EXTRA_CONTACTS", "").split(",") if a.strip()}
+        self.replied_to = frozenset(self.replied_to | extra)
         self.replied_at = time.time()
         print(f"{len(self.replied_to)} people you've written to", flush=True)
 

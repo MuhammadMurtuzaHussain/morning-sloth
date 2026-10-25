@@ -103,6 +103,7 @@ You need an Arduino UNO Q (the 4 GB one) on Wi-Fi, and `adb` on your computer (`
 | `POLL_MINUTES` | `5` | How often to check Gmail |
 | `BUS_FROM`, `BUS_TO` | `09:00`, `12:00` | When the countdown shows |
 | `BUS_WALK_MINUTES` | `0` | Count down to when you must leave, not to the bus |
+| `EXTRA_CONTACTS` | none | Comma-separated addresses that always count as people you've written to |
 | `TFI_API_KEY` | none | Live bus times; without it the countdown uses the timetable |
 | `LIVE_MINUTES` | `2` | How often to fetch the live feed during bus hours |
 
