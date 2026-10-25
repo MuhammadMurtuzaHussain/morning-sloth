@@ -5,11 +5,11 @@ each new email matters, apply the code floors, and keep the strongest level amon
 mail you still haven't read. Read it on your phone and the sloth goes back to sleep.
 
 Between BUS_FROM and BUS_TO the matrix also counts down to the next bus, from the
-timetable in bus_timetable.json.
+timetable in bus_timetable.json, corrected by the live feed when TFI_API_KEY is set.
 
 Settings live in secrets.env next to app.yaml (never committed):
   GMAIL_USER, GMAIL_APP_PASSWORD, QUIET_FROM=00:30, WAKE_AT=07:00, POLL_MINUTES=5,
-  BUS_FROM=09:00, BUS_TO=12:00, BUS_WALK_MINUTES=0
+  BUS_FROM=09:00, BUS_TO=12:00, BUS_WALK_MINUTES=0, TFI_API_KEY, LIVE_MINUTES=2
 With no Gmail settings, it reads fake_inbox.jsonl instead, for testing.
 """
 import json
@@ -26,6 +26,7 @@ from arduino.app_utils import App, Bridge
 import bus
 import glyphs
 import irishtime
+import live
 from floors import ACCOUNT_SECURITY, apply_floor
 from gmail import Gmail
 from triage import classify
@@ -37,7 +38,7 @@ RANK = {"noise": 0, "fyi": 1, "invalid": 1, "soon": 2, "needs_today": 3}
 
 def load_settings():
     settings = {"QUIET_FROM": "00:30", "WAKE_AT": "07:00", "POLL_MINUTES": "5",
-                "BUS_FROM": "09:00", "BUS_TO": "12:00", "BUS_WALK_MINUTES": "0"}
+                "BUS_FROM": "09:00", "BUS_TO": "12:00", "BUS_WALK_MINUTES": "0", "LIVE_MINUTES": "2"}
     path = ROOT / "secrets.env"
     if path.exists():
         for line in path.read_text().splitlines():
@@ -86,6 +87,8 @@ class Sloth:
         timetable = ROOT / "bus_timetable.json"
         self.timetable = bus.load(timetable) if timetable.exists() else None
         self.last_bus = "unset"
+        # Live changes at our stop, and when they were fetched
+        self.live, self.live_at, self.live_ok = None, 0, None
         self.level = "asleep"
         self.last_ok = time.time()
         self.replied_to, self.replied_at = frozenset(), 0
@@ -157,6 +160,33 @@ class Sloth:
                 traceback.print_exc()
             time.sleep(60 * float(self.settings["POLL_MINUTES"]))
 
+    def bus_time(self):
+        now = irishtime.now()
+        return (not between(now, self.settings["QUIET_FROM"], self.settings["WAKE_AT"])
+                and between(now, self.settings["BUS_FROM"], self.settings["BUS_TO"]))
+
+    def run_live(self):
+        key = self.settings.get("TFI_API_KEY")
+        if not key or self.timetable is None:
+            return
+        tt = self.timetable
+        stop, routes, sequences = tt["stop_id"], set(tt.get("route_ids", [])), bus.sequences(tt)
+        while True:
+            if self.bus_time():
+                try:
+                    changes = live.at_stop(live.fetch(key), stop, routes, sequences)
+                    with self.lock:
+                        self.live, self.live_at = changes, time.time()
+                    if self.live_ok is not True:
+                        print("bus: live times on", flush=True)
+                    self.live_ok = True
+                except Exception as e:
+                    # Never print the request itself: its headers carry the key
+                    if self.live_ok is not False:
+                        print(f"bus: live feed unavailable ({type(e).__name__}), using the timetable", flush=True)
+                    self.live_ok = False
+            time.sleep(60 * float(self.settings["LIVE_MINUTES"]))
+
     def state(self):
         with self.lock:
             if between(irishtime.now(), self.settings["QUIET_FROM"], self.settings["WAKE_AT"]):
@@ -167,16 +197,18 @@ class Sloth:
 
     def bus_frame(self):
         """A countdown frame while it's bus time, otherwise an empty string."""
-        now = irishtime.now()
-        if (self.timetable is None
-                or between(now, self.settings["QUIET_FROM"], self.settings["WAKE_AT"])
-                or not between(now, self.settings["BUS_FROM"], self.settings["BUS_TO"])):
+        if self.timetable is None or not self.bus_time():
             return ""
-        minutes = bus.minutes_to_leave(self.timetable, now, int(self.settings["BUS_WALK_MINUTES"]))
-        if minutes != self.last_bus:
-            self.last_bus = minutes
-            print(f"bus: {'no more buses today' if minutes is None else f'leave in {minutes} min'}", flush=True)
-        return glyphs.countdown(minutes) if minutes is not None else ""
+        with self.lock:
+            changes = self.live if time.time() - self.live_at < 10 * 60 else None
+        minutes = bus.minutes_to_leave(self.timetable, irishtime.now(),
+                                       int(self.settings["BUS_WALK_MINUTES"]), changes)
+        if (minutes, changes is not None) != self.last_bus:
+            self.last_bus = (minutes, changes is not None)
+            source = "live" if changes is not None else "timetable"
+            print(f"bus: {'no more buses today' if minutes is None else f'leave in {minutes} min'} ({source})",
+                  flush=True)
+        return glyphs.countdown(minutes, changes is not None) if minutes is not None else ""
 
 
 if __name__ == "__main__":
@@ -184,4 +216,5 @@ if __name__ == "__main__":
     Bridge.provide("get_state", sloth.state)
     Bridge.provide("get_bus", sloth.bus_frame)
     threading.Thread(target=sloth.run, daemon=True).start()
+    threading.Thread(target=sloth.run_live, daemon=True).start()
     App.run()

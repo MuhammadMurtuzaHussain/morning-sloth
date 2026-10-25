@@ -5,7 +5,7 @@
 - **Asleep, breathing slowly:** nothing needs you. Leave the phone where it is.
 - **One eye open:** someone you've written to replied, or a deadline is close. It can wait until the bus.
 - **Wide awake, blinking:** something needs you today, such as a failed payment, a parcel arriving, a leaked key or a recruiter asking for something.
-- **Bus and a number:** minutes until the next 404 leaves Castlegar GAA.
+- **Bus and a number:** minutes until the next 404 actually reaches Castlegar GAA, late buses and cancellations included. A dot in the top-right corner means the time is live.
 
 It never changes your mailbox. Read the mail on your phone and the sloth goes back to sleep by itself.
 
@@ -19,7 +19,7 @@ The sloth reads it all so I don't have to. I glance at it, and I only pick up th
 
 ## Why open matters here
 
-This is my job search, my bills and my home address. Sorting it with a cloud model would mean sending all of that to someone else's server every night. Gemma 4 E2B runs **on the board itself**, so the mail never leaves the room. The only things that leave the board are the read-only IMAP connection to Gmail and, once a week if you want, the public bus timetable download.
+This is my job search, my bills and my home address. Sorting it with a cloud model would mean sending all of that to someone else's server every night. Gemma 4 E2B runs **on the board itself**, so the mail never leaves the room. The only things that leave the board are the read-only IMAP connection to Gmail and, during bus hours, a download of Transport for Ireland's public live bus feed. That request carries an API key and nothing about you.
 
 ## How it works
 
@@ -31,6 +31,7 @@ flowchart LR
   M -->|needs_today, soon, fyi, noise| R[floors.py code rules]
   R --> F{strongest unread level}
   T[TFI timetable] --> B[bus.py countdown]
+  RT[TFI live feed] -->|delays, cancellations| B
   F -->|face| K[sketch on the STM32]
   B -->|frame| K
   K --> L[13 x 8 LED matrix]
@@ -102,10 +103,20 @@ You need an Arduino UNO Q (the 4 GB one) on Wi-Fi, and `adb` on your computer (`
 | `POLL_MINUTES` | `5` | How often to check Gmail |
 | `BUS_FROM`, `BUS_TO` | `09:00`, `12:00` | When the countdown shows |
 | `BUS_WALK_MINUTES` | `0` | Count down to when you must leave, not to the bus |
+| `TFI_API_KEY` | none | Live bus times; without it the countdown uses the timetable |
+| `LIVE_MINUTES` | `2` | How often to fetch the live feed during bus hours |
+
+### Live bus times
+
+Get a free key at [developer.nationaltransport.ie](https://developer.nationaltransport.ie): sign up, subscribe to the GTFS-Realtime API and copy the primary key. Save it on the board without it showing on screen:
+```bash
+adb shell -t 'read -r -s -p "TFI API key: " K; echo; cd ~/ArduinoApps/morning-sloth && sed -i "/^TFI_API_KEY=/d" secrets.env && echo "TFI_API_KEY=$K" >> secrets.env && TMPDIR=/tmp arduino-app-cli app restart ~/ArduinoApps/morning-sloth'
+```
+Every two minutes during bus hours the board downloads the national feed (about 500 KB as protobuf, read by `live.py` with no extra libraries). It picks out the 404's trips at your stop and applies each bus's delay, drops cancelled ones and adds extra ones. If the feed is down or more than 10 minutes old, the countdown falls back to the timetable and the corner dot goes out.
 
 ### Your own bus
 
-The timetable comes from Transport for Ireland's public GTFS feed and needs no account. To use a different route or stop:
+The timetable comes from Transport for Ireland's public GTFS feed and needs no account. Live times match it by trip ID, so cut it again whenever TFI republishes the feed. To use a different route or stop:
 ```bash
 curl -LO https://www.transportforireland.ie/transitData/Data/GTFS_Bus_Eireann.zip && unzip GTFS_Bus_Eireann.zip -d gtfs
 python3 tools/bus_timetable.py gtfs 404 8460B5243201 > app/bus_timetable.json
@@ -117,11 +128,11 @@ python3 tools/bus_timetable.py gtfs 404 8460B5243201 > app/bus_timetable.json
 ```bash
 python3 -m unittest discover tests
 ```
-24 tests cover the rules, the setup cap, Irish summer time (including this Sunday's clock change), the bus timetable (including the October bank holiday), the countdown frames and email previews. The model benchmark runs on the board: `python3 eval/bench.py <labelled.jsonl> <out dir> device`.
+36 tests cover the rules, the setup cap, Irish summer time (including this Sunday's clock change), the bus timetable (including the October bank holiday), the live feed (protobuf decoding, late, cancelled, skipped and extra buses), the countdown frames and email previews. The model benchmark runs on the board: `python3 eval/bench.py <labelled.jsonl> <out dir> device`.
 
 ## Honest limits
 
-- **The countdown is timetable time, not live.** Live bus positions need a Transport for Ireland developer key, and getting one needs an account.
+- **Live times are only as good as the feed.** Transport for Ireland's feed sometimes reports a bus late at an earlier stop and nothing at yours. The sloth then carries that delay forward, as the GTFS-Realtime spec says, which can be a few minutes off.
 - **Security alerts are hard.** Gemma can't tell a sign-in you made from one you didn't. In testing it left ordinary "new sign-in" notices quiet, which is right almost every time, but it means a real intruder's sign-in notice might not wake it either. Leaked-key alerts do wake it.
 - **The rules were written after seeing the first set.** That's why the held-out set exists, and why its numbers are the ones to trust.
 - **It's slow, by design.** About 35 seconds per email on the board's CPU. Ten emails overnight take six minutes, while you're asleep anyway.
@@ -135,6 +146,7 @@ app/                 the UNO Q app (App Lab layout)
   python/floors.py   the code rules
   python/gmail.py    read-only IMAP: EXAMINE and BODY.PEEK only
   python/bus.py      next departure from the GTFS cut
+  python/live.py     live delays and cancellations from the TFI realtime feed
   python/glyphs.py   bus countdown frames
   python/irishtime.py Irish time without tzdata
   sketch/            STM32 sketch: faces, breathing, blinking

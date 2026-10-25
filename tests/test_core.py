@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "app" / "python"))
 import bus  # noqa: E402
 import glyphs  # noqa: E402
 import irishtime  # noqa: E402
+import live  # noqa: E402
 from floors import apply_floor, floor, from_setup  # noqa: E402
 from gmail import _snippet  # noqa: E402
 
@@ -127,6 +128,109 @@ class Glyphs(unittest.TestCase):
     def test_single_digit_and_overflow(self):
         self.assertIn("7.7", glyphs.render(glyphs.countdown(4)))
         self.assertEqual(glyphs.countdown(150), glyphs.countdown(None))
+
+    def test_live_dot_lights_only_the_corner(self):
+        plain, dotted = glyphs.countdown(7), glyphs.countdown(7, live_dot=True)
+        self.assertEqual([i for i in range(104) if plain[i] != dotted[i]], [12])
+
+
+def pb_varint(n):
+    n &= (1 << 64) - 1
+    out = b""
+    while True:
+        out += bytes([(n & 0x7F) | (0x80 if n > 0x7F else 0)])
+        n >>= 7
+        if not n:
+            return out
+
+
+def pb(number, value):
+    """One protobuf field: ints as varints, str and bytes as length-delimited."""
+    if isinstance(value, int):
+        return pb_varint(number << 3) + pb_varint(value)
+    value = value.encode() if isinstance(value, str) else value
+    return pb_varint(number << 3 | 2) + pb_varint(len(value)) + value
+
+
+def trip_update(trip_id, stops=(), rel=0, route="2 404 c a", date="20261027"):
+    trip = pb(1, trip_id) + pb(3, date) + pb(4, rel) + pb(5, route)
+    body = pb(1, trip) + b"".join(pb(2, s) for s in stops)
+    return pb(2, pb(1, "e" + trip_id) + pb(3, body))
+
+
+def stop_update(seq, stop_id, delay=None, at=None, rel=0):
+    event = (pb(1, delay) if delay is not None else b"") + (pb(2, at) if at is not None else b"")
+    return pb(1, seq) + pb(3, event) + pb(4, stop_id) + pb(5, rel)
+
+
+class Live(unittest.TestCase):
+    STOP, ROUTES, SEQ = "8460B5243201", {"2 404 c a"}, {"a": 4, "b": 4, "c": 4, "d": 4, "e": 4}
+
+    def changes(self, *entities):
+        feed = pb(1, pb(1, "2.0")) + b"".join(entities)
+        return live.at_stop(live.parse(feed), self.STOP, self.ROUTES, self.SEQ)
+
+    def test_negative_delays_decode(self):
+        trips = live.parse(trip_update("a", [stop_update(4, self.STOP, delay=-90)]))
+        self.assertEqual(trips[0]["stop_time_update"][0]["departure"], {"delay": -90})
+
+    def test_delay_at_our_stop(self):
+        changes, _ = self.changes(trip_update("a", [stop_update(4, self.STOP, delay=2327)]))
+        self.assertEqual(changes[("a", "20261027")], {"delay": 2327})
+
+    def test_delay_carries_forward_from_an_earlier_stop(self):
+        changes, _ = self.changes(trip_update("a", [stop_update(2, "X", delay=300),
+                                                    stop_update(6, "Y", delay=900)]))
+        self.assertEqual(changes[("a", "20261027")], {"delay": 300})
+
+    def test_cancelled_and_skipped_buses_are_dropped(self):
+        changes, _ = self.changes(trip_update("b", rel=live.CANCELED),
+                                  trip_update("c", [stop_update(4, self.STOP, rel=live.SKIPPED)]))
+        self.assertEqual(changes[("b", "20261027")], {"skip": True})
+        self.assertEqual(changes[("c", "20261027")], {"skip": True})
+
+    def test_added_bus_on_our_route_counts(self):
+        _, added = self.changes(trip_update("x", [stop_update(1, self.STOP, at=1792998000)], rel=live.ADDED),
+                                trip_update("y", [stop_update(1, self.STOP, at=1792999000)], rel=live.ADDED,
+                                            route="2 409 c a"))
+        self.assertEqual(added, [1792998000])
+
+    def test_trips_we_dont_timetable_are_ignored(self):
+        changes, _ = self.changes(trip_update("zzz", [stop_update(4, self.STOP, delay=60)]))
+        self.assertEqual(changes, {})
+
+
+class LiveBus(unittest.TestCase):
+    timetable = {
+        "calendar": {"weekday": {"days": [1, 1, 1, 1, 1, 0, 0], "start": "20261001", "end": "20261231"}},
+        "exceptions": [],
+        "departures": [["09:02:00", "weekday", "Newcastle", "a", 4],
+                       ["09:30:00", "weekday", "Newcastle", "b", 4]],
+    }
+    now = datetime(2026, 10, 27, 9, 0)
+
+    def test_late_bus_counts_down_to_when_it_really_comes(self):
+        live_changes = ({("a", "20261027"): {"delay": 600}}, [])
+        self.assertEqual(bus.minutes_to_leave(self.timetable, self.now, 0, live_changes), 12)
+
+    def test_cancelled_bus_moves_to_the_next(self):
+        live_changes = ({("a", "20261027"): {"skip": True}}, [])
+        self.assertEqual(bus.minutes_to_leave(self.timetable, self.now, 0, live_changes), 30)
+
+    def test_extra_bus_shows_up(self):
+        # 09:10 Irish winter time is 09:10 UTC
+        extra = int(datetime(2026, 10, 27, 9, 10, tzinfo=timezone.utc).timestamp())
+        live_changes = ({("a", "20261027"): {"skip": True}}, [extra])
+        self.assertEqual(bus.minutes_to_leave(self.timetable, self.now, 0, live_changes), 10)
+
+    def test_yesterdays_delay_does_not_apply_today(self):
+        live_changes = ({("a", "20261026"): {"delay": 600}}, [])
+        self.assertEqual(bus.minutes_to_leave(self.timetable, self.now, 0, live_changes), 2)
+
+    def test_real_timetable_has_trip_ids_for_matching(self):
+        real = bus.load(ROOT / "app" / "bus_timetable.json")
+        self.assertTrue(real["route_ids"])
+        self.assertEqual(len(bus.sequences(real)), len(real["departures"]))
 
 
 class Snippet(unittest.TestCase):

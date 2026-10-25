@@ -22,8 +22,9 @@ DIGITS = {
 BUS = ["3333", "3..3", "3333", "3333", ".3.3"]
 
 
-def countdown(minutes):
-    """Bus on the left, minutes on the right. 100 or more shows as '--'."""
+def countdown(minutes, live_dot=False):
+    """Bus on the left, minutes on the right. 100 or more shows as '--'.
+    `live_dot` lights the top-right corner, to show the time comes from the live feed."""
     text = f"{minutes:>2}" if minutes is not None and 0 <= minutes < 100 else "--"
     grid = [["."] * 13 for _ in range(8)]
 
@@ -34,6 +35,8 @@ def countdown(minutes):
                     grid[top + y][left + x] = c
 
     stamp(BUS, 0)
+    if live_dot:
+        grid[0][12] = "7"
     for i, ch in enumerate(text):
         if ch != " ":
             stamp(DIGITS[ch], 5 + i * 4)

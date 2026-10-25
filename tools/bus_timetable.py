@@ -25,7 +25,9 @@ def build(gtfs, route_short_name, stop_id):
         trip = trips.get(st["trip_id"])
         # pickup_type 1 means the bus doesn't pick up here (for example at the last stop)
         if trip and st["stop_id"] == stop_id and st.get("pickup_type", "0") != "1":
-            departures.append([st["departure_time"], trip["service_id"], trip["trip_headsign"]])
+            # trip_id and stop_sequence let live.py match the realtime feed
+            departures.append([st["departure_time"], trip["service_id"], trip["trip_headsign"],
+                               st["trip_id"], int(st["stop_sequence"])])
     services = {d[1] for d in departures}
     calendar = {c["service_id"]: c for c in rows(gtfs, "calendar.txt") if c["service_id"] in services}
     exceptions = [[e["service_id"], e["date"], e["exception_type"]]
@@ -35,6 +37,7 @@ def build(gtfs, route_short_name, stop_id):
         "route": route_short_name,
         "stop_id": stop_id,
         "stop_name": stop["stop_name"],
+        "route_ids": sorted(routes),
         "feed_version": feed.get("feed_version", ""),
         "valid_until": max((c["end_date"] for c in calendar.values()), default=""),
         "calendar": {sid: {"days": [int(c[d]) for d in ("monday", "tuesday", "wednesday", "thursday",
