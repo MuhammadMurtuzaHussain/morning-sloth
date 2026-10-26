@@ -25,3 +25,11 @@ def to_irish(dt):
 
 def now():
     return to_irish(datetime.now(timezone.utc))
+
+
+def between(now, start, end):
+    """Whether `now` is in [start, end) given as "HH:MM"; a window may wrap past midnight."""
+    hm = now.strftime("%H:%M")
+    if start <= end:
+        return start <= hm < end
+    return hm >= start or hm < end

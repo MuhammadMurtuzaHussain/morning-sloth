@@ -24,19 +24,24 @@ ACCOUNT_SECURITY = r"@accounts\.google\.com$"
 SETUP_WINDOW = (timedelta(minutes=60), timedelta(minutes=15))
 
 
-def floor(email, replied_to=frozenset()):
+def explain(email, replied_to=frozenset()):
+    """(level, reason) from the code rules alone; reason is empty when no rule fired."""
     text = (email["subject"] + " " + email["snippet"]).lower()
     sender = email["sender"].lower()
-    level = "noise"
+    level, why = "noise", ""
     if sender in replied_to and not re.search(ROLE_ADDRESS, sender):
-        level = "soon"
+        level, why = "soon", "from someone you have written to"
     if re.search(BILLS, sender) and re.search(PAYMENT_FAILED, text):
-        level = "needs_today"
+        level, why = "needs_today", "a bill or payment failed"
     if re.search(CARRIERS, sender) and re.search(DELIVERY_TODAY, text):
-        level = "needs_today"
+        level, why = "needs_today", "a parcel is arriving today"
     if re.search(STARTING_NOW, text):
-        level = "needs_today"
-    return level
+        level, why = "needs_today", "an event is starting now"
+    return level, why
+
+
+def floor(email, replied_to=frozenset()):
+    return explain(email, replied_to)[0]
 
 
 def from_setup(email, setup_at):

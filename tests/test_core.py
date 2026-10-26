@@ -12,7 +12,7 @@ import bus  # noqa: E402
 import glyphs  # noqa: E402
 import irishtime  # noqa: E402
 import live  # noqa: E402
-from floors import apply_floor, floor, from_setup  # noqa: E402
+from floors import apply_floor, explain, floor, from_setup  # noqa: E402
 from gmail import _snippet  # noqa: E402
 
 
@@ -46,6 +46,15 @@ class Floors(unittest.TestCase):
 
     def test_invalid_model_answer_counts_as_fyi(self):
         self.assertEqual(apply_floor(mail("a@b.com", "x"), "invalid"), "fyi")
+
+
+class Explain(unittest.TestCase):
+    def test_names_the_rule_that_fired(self):
+        webinar = {"sender": "x@y.com", "subject": "Webinar starting in 10 minutes", "snippet": ""}
+        self.assertEqual(explain(webinar), ("needs_today", "an event is starting now"))
+        friend = {"sender": "me@x.com", "subject": "hi", "snippet": ""}
+        self.assertEqual(explain(friend, {"me@x.com"}), ("soon", "from someone you have written to"))
+        self.assertEqual(explain(friend), ("noise", ""))
 
 
 class SetupAlerts(unittest.TestCase):
@@ -85,6 +94,25 @@ class IrishTime(unittest.TestCase):
     def test_other_timezones_convert(self):
         pdt = datetime.fromisoformat("2026-10-22T13:23:00-07:00")
         self.assertEqual(irishtime.to_irish(pdt), datetime(2026, 10, 22, 21, 23))
+
+
+class BusWindow(unittest.TestCase):
+    """The countdown shows from 09:00 up to, not including, 13:00; any other time it's just the sloth."""
+    def at(self, hm):
+        return datetime(2026, 10, 26, int(hm[:2]), int(hm[3:]))
+
+    def test_countdown_runs_nine_to_one(self):
+        for hm in ("09:00", "11:30", "12:59"):
+            self.assertTrue(irishtime.between(self.at(hm), "09:00", "13:00"), hm)
+
+    def test_sloth_only_outside_the_window(self):
+        for hm in ("08:59", "13:00", "15:00", "23:59", "03:00"):
+            self.assertFalse(irishtime.between(self.at(hm), "09:00", "13:00"), hm)
+
+    def test_window_may_wrap_past_midnight(self):
+        self.assertTrue(irishtime.between(self.at("23:00"), "22:00", "02:00"))
+        self.assertTrue(irishtime.between(self.at("01:00"), "22:00", "02:00"))
+        self.assertFalse(irishtime.between(self.at("12:00"), "22:00", "02:00"))
 
 
 class Bus(unittest.TestCase):

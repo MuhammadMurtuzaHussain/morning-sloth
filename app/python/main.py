@@ -4,12 +4,13 @@ Every few minutes: read unread Gmail (read-only), ask Gemma on the board how muc
 each new email matters, apply the code floors, and keep the strongest level among
 mail you still haven't read. Read it on your phone and the sloth goes back to sleep.
 
-Between BUS_FROM and BUS_TO the matrix also counts down to the next bus, from the
-timetable in bus_timetable.json, corrected by the live feed when TFI_API_KEY is set.
+Between BUS_FROM and BUS_TO (09:00 to 13:00) the matrix also counts down to the next
+bus, from the timetable in bus_timetable.json, corrected by the live feed when
+TFI_API_KEY is set. Outside that window it shows only the sloth.
 
 Settings live in secrets.env next to app.yaml (never committed):
   GMAIL_USER, GMAIL_APP_PASSWORD, QUIET_FROM=00:30, WAKE_AT=07:00, POLL_MINUTES=5,
-  BUS_FROM=09:00, BUS_TO=12:00, BUS_WALK_MINUTES=0, TFI_API_KEY, LIVE_MINUTES=2,
+  BUS_FROM=09:00, BUS_TO=13:00, BUS_WALK_MINUTES=0, TFI_API_KEY, LIVE_MINUTES=2,
   EXTRA_CONTACTS=a@x.com,b@y.com (always count as people you've written to)
 With no Gmail settings, it reads fake_inbox.jsonl instead, for testing.
 """
@@ -28,7 +29,7 @@ import bus
 import glyphs
 import irishtime
 import live
-from floors import ACCOUNT_SECURITY, apply_floor
+from floors import ACCOUNT_SECURITY, apply_floor, explain
 from gmail import Gmail
 from triage import classify
 
@@ -36,10 +37,11 @@ ROOT = Path(__file__).resolve().parent.parent
 STATE_DIR = ROOT / ".state"
 FACE_FOR = {"needs_today": "awake", "soon": "peek", "fyi": "asleep", "noise": "asleep"}
 RANK = {"noise": 0, "fyi": 1, "invalid": 1, "soon": 2, "needs_today": 3}
+EVENTS_MAX = 200_000  # bytes; the log is cut back to its newest half past this
 
 def load_settings():
     settings = {"QUIET_FROM": "00:30", "WAKE_AT": "07:00", "POLL_MINUTES": "5",
-                "BUS_FROM": "09:00", "BUS_TO": "12:00", "BUS_WALK_MINUTES": "0", "LIVE_MINUTES": "2"}
+                "BUS_FROM": "09:00", "BUS_TO": "13:00", "BUS_WALK_MINUTES": "0", "LIVE_MINUTES": "2"}
     path = ROOT / "secrets.env"
     if path.exists():
         for line in path.read_text().splitlines():
@@ -57,13 +59,6 @@ def gemma_url():
         if fields[1] == "00000000":
             return f"http://{'.'.join(str(b) for b in struct.pack('<L', int(fields[2], 16)))}:8088"
     return "http://127.0.0.1:8088"
-
-
-def between(now, start, end):
-    hm = now.strftime("%H:%M")
-    if start <= end:
-        return start <= hm < end
-    return hm >= start or hm < end
 
 
 def setup_anchor(mail):
@@ -96,7 +91,20 @@ class Sloth:
         user, password = self.settings.get("GMAIL_USER"), self.settings.get("GMAIL_APP_PASSWORD")
         self.gmail = Gmail(user, password) if user and password else None
         self.lock = threading.Lock()
+        self.events_path = STATE_DIR / "events.jsonl"
         print(f"Gemma at {self.url}; reading {'Gmail as ' + user if self.gmail else 'fake_inbox.jsonl'}", flush=True)
+
+    def emit(self, event, **fields):
+        """One line per step, for tools/demo.py to follow live (the matrix is the real output)."""
+        try:
+            line = json.dumps({"at": irishtime.now().strftime("%H:%M:%S"), "event": event, **fields})
+            if self.events_path.exists() and self.events_path.stat().st_size > EVENTS_MAX:
+                lines = self.events_path.read_text().splitlines()
+                self.events_path.write_text("\n".join(lines[len(lines) // 2:]) + "\n")
+            with self.events_path.open("a") as f:
+                f.write(line + "\n")
+        except OSError:
+            pass  # a full disk must never stop the sloth
 
     def unread(self):
         if self.gmail:
@@ -130,11 +138,15 @@ class Sloth:
             key = str(msg["id"])
             fresh = key not in self.labels
             if fresh:
+                self.emit("reading", sender=msg["sender"], subject=msg["subject"])
                 model, seconds, _ = classify(msg, self.url)
                 self.labels[key] = model
                 self.labels_path.write_text(json.dumps(self.labels))
             final[key] = apply_floor(msg, self.labels[key], self.replied_to, setup_at)
             if fresh:
+                self.emit("judged", sender=msg["sender"], subject=msg["subject"], model=self.labels[key],
+                          final=final[key], seconds=round(seconds, 1),
+                          rule=explain(msg, self.replied_to)[1])
                 print(f"{seconds:5.1f}s {self.labels[key]:>11} -> {final[key]:<11} "
                       f"{msg['sender']} | {msg['subject'][:50]}", flush=True)
                 # Each email takes Gemma half a minute, so wake as soon as one matters
@@ -145,6 +157,7 @@ class Sloth:
         # Only mail that's still unread can change the face
         self.labels = {k: self.labels[k] for k in final}
         self.labels_path.write_text(json.dumps(self.labels))
+        self.emit("pass", unread=len(mail), strongest=top, face=self.level)
         print(f"{len(mail)} unread, strongest: {top} -> {self.level}", flush=True)
 
     def show(self, label, raise_only=False):
@@ -152,6 +165,8 @@ class Sloth:
         order = ["asleep", "peek", "awake"]
         with self.lock:
             if not raise_only or order.index(face) > order.index(self.level):
+                if face != self.level:
+                    self.emit("face", face=face)
                 self.level = face
             self.last_ok = time.time()
 
@@ -165,8 +180,8 @@ class Sloth:
 
     def bus_time(self):
         now = irishtime.now()
-        return (not between(now, self.settings["QUIET_FROM"], self.settings["WAKE_AT"])
-                and between(now, self.settings["BUS_FROM"], self.settings["BUS_TO"]))
+        return (not irishtime.between(now, self.settings["QUIET_FROM"], self.settings["WAKE_AT"])
+                and irishtime.between(now, self.settings["BUS_FROM"], self.settings["BUS_TO"]))
 
     def run_live(self):
         key = self.settings.get("TFI_API_KEY")
@@ -192,7 +207,7 @@ class Sloth:
 
     def state(self):
         with self.lock:
-            if between(irishtime.now(), self.settings["QUIET_FROM"], self.settings["WAKE_AT"]):
+            if irishtime.between(irishtime.now(), self.settings["QUIET_FROM"], self.settings["WAKE_AT"]):
                 return "off"
             if time.time() - self.last_ok > 30 * 60:
                 return "lost"

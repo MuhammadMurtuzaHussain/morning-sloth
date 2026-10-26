@@ -1,0 +1,18 @@
+# Runs the unit tests on every push and pull request. They need no board, no Gmail and no model:
+# they cover the code rules, the bus window, Irish time, the timetable and the live-feed decoder.
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 -m unittest discover tests -v
