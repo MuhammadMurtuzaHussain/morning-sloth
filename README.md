@@ -168,14 +168,14 @@ You need an Arduino UNO Q (the 4 GB one) on Wi-Fi, and `adb` on your computer (`
    `TMPDIR=/tmp` matters, because `adb shell` sets an Android temp folder that breaks the build.
 4. **Gmail.** Turn on 2-Step Verification, create an app password at myaccount.google.com/apppasswords, then run this. It asks for the password without echoing it and keeps only the 16 letters:
    ```bash
-   adb shell -t 'read -r -s -p "Gmail app password: " P; echo; P=$(printf %s "$P" | tr -cd "a-zA-Z"); echo "length: ${#P}"; [ ${#P} -eq 16 ] || exit 1; printf "GMAIL_USER=you@gmail.com\nGMAIL_APP_PASSWORD=%s\nQUIET_FROM=00:30\nWAKE_AT=07:00\n" "$P" > ~/ArduinoApps/morning-sloth/secrets.env; chmod 600 ~/ArduinoApps/morning-sloth/secrets.env; TMPDIR=/tmp arduino-app-cli app restart ~/ArduinoApps/morning-sloth'
+   adb shell -t 'read -r -s -p "Gmail app password: " P; echo; P=$(printf %s "$P" | tr -cd "a-zA-Z"); echo "length: ${#P}"; [ ${#P} -eq 16 ] || exit 1; printf "GMAIL_USER=you@gmail.com\nGMAIL_APP_PASSWORD=%s\nQUIET_FROM=02:00\nWAKE_AT=06:00\n" "$P" > ~/ArduinoApps/morning-sloth/secrets.env; chmod 600 ~/ArduinoApps/morning-sloth/secrets.env; TMPDIR=/tmp arduino-app-cli app restart ~/ArduinoApps/morning-sloth'
    ```
 
 ### Settings (`secrets.env` on the board)
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `QUIET_FROM`, `WAKE_AT` | `00:30`, `07:00` | Matrix stays dark in between |
+| `QUIET_FROM`, `WAKE_AT` | `02:00`, `06:00` | Matrix stays dark in between |
 | `POLL_MINUTES` | `5` | How often to check Gmail |
 | `BUS_FROM`, `BUS_TO` | `09:00`, `13:00` | The only hours the bus countdown shows; outside them it's just the sloth |
 | `BUS_WALK_MINUTES` | `0` | Count down to when you must leave, not to the bus |

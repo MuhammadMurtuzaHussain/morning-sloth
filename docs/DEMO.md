@@ -43,7 +43,7 @@ Allow about a minute for the poll (`POLL_MINUTES=1`) plus about 35 seconds for G
 
 ## Before you film
 
-- The matrix is dark from `QUIET_FROM` to `WAKE_AT` (00:30 to 07:00 by default). Film outside it, or set `QUIET_FROM=23:59` in `secrets.env` and restart.
+- The matrix is dark from `QUIET_FROM` to `WAKE_AT` (02:00 to 06:00 by default). Film outside it, or set `QUIET_FROM=23:59` in `secrets.env` and restart.
 - Start asleep: mark any unread mail as read first (`python3 tools/demo.py asleep` only clears the demo emails).
 - The bus countdown shows only from 09:00 to 13:00. At any other hour you get just the faces.
 - Keep the Terminal's width at 80 columns or more, and lights low so the matrix reads on camera.

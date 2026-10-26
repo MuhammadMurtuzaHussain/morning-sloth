@@ -9,7 +9,7 @@ bus, from the timetable in bus_timetable.json, corrected by the live feed when
 TFI_API_KEY is set. Outside that window it shows only the sloth.
 
 Settings live in secrets.env next to app.yaml (never committed):
-  GMAIL_USER, GMAIL_APP_PASSWORD, QUIET_FROM=00:30, WAKE_AT=07:00, POLL_MINUTES=5,
+  GMAIL_USER, GMAIL_APP_PASSWORD, QUIET_FROM=02:00, WAKE_AT=06:00, POLL_MINUTES=5,
   BUS_FROM=09:00, BUS_TO=13:00, BUS_WALK_MINUTES=0, TFI_API_KEY, LIVE_MINUTES=2,
   EXTRA_CONTACTS=a@x.com,b@y.com (always count as people you've written to)
 With no Gmail settings, it reads fake_inbox.jsonl instead, for testing.
@@ -40,7 +40,7 @@ RANK = {"noise": 0, "fyi": 1, "invalid": 1, "soon": 2, "needs_today": 3}
 EVENTS_MAX = 200_000  # bytes; the log is cut back to its newest half past this
 
 def load_settings():
-    settings = {"QUIET_FROM": "00:30", "WAKE_AT": "07:00", "POLL_MINUTES": "5",
+    settings = {"QUIET_FROM": "02:00", "WAKE_AT": "06:00", "POLL_MINUTES": "5",
                 "BUS_FROM": "09:00", "BUS_TO": "13:00", "BUS_WALK_MINUTES": "0", "LIVE_MINUTES": "2"}
     path = ROOT / "secrets.env"
     if path.exists():
