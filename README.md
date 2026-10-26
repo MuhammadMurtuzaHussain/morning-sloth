@@ -1,17 +1,93 @@
+<p align="center">
+  <img src="docs/post/cover.jpg" alt="Morning Sloth: Gemma 4 on an Arduino UNO Q. Look at the sloth, not your phone." width="100%" />
+</p>
+
+<p align="center">
+  <b>Look at the sloth, not your phone.</b> An Arduino UNO Q reads your Gmail overnight, open-weight <b>Gemma 4</b> decides on the board whether anything needs you, and one face on an LED matrix tells you.
+</p>
+
+<p align="center">
+  <a href="#see-it-live">See it live</a> ·
+  <a href="docs/DEMO.md">Demo guide</a> ·
+  <a href="#setup">Setup</a> ·
+  <a href="eval/RESULTS.md">Results</a> ·
+  Built for the <a href="https://dev.to/challenges/hacktoberfest-week3-2026-10-19">DEV Hacktoberfest Open-Source AI Challenge, Week 3: Slow and Steady</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/MuhammadMurtuzaHussain/morning-sloth/actions/workflows/tests.yml"><img src="https://github.com/MuhammadMurtuzaHussain/morning-sloth/actions/workflows/tests.yml/badge.svg" alt="Tests" /></a>
+  <img src="https://img.shields.io/badge/Gemma%204-E2B%20on%20the%20board-4285F4?logo=google&logoColor=white" alt="Gemma 4 E2B on the board" />
+  <img src="https://img.shields.io/badge/Arduino-UNO%20Q-00878F?logo=arduino&logoColor=white" alt="Arduino UNO Q" />
+  <img src="https://img.shields.io/badge/mail%20leaves%20the%20room-never-2ea44f" alt="Your mail never leaves the room" />
+  <img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT" />
+</p>
+
 # Morning Sloth 🦥
 
-**Look at the sloth, not your phone.** An Arduino UNO Q on the desk reads your Gmail overnight, lets open-weight **Gemma 4 E2B** decide on the board whether anything actually needs you, and shows the answer as one face on its LED matrix. Between 9 and 12 it also counts down to your bus.
+In plain words: you sleep late, you hate waking up to twenty notifications, and only one in four overnight emails actually matters. The sloth reads your inbox for you and shows **one of three faces**. You only pick up your phone when it's awake.
+
+## See it live
+
+Real footage of the board, no editing tricks. The face is the whole interface.
+
+| Asleep | One eye open | Wide awake | Bus |
+|---|---|---|---|
+| <img src="docs/media/face-asleep.gif" alt="The sloth asleep, breathing slowly" /> | <img src="docs/media/face-peek.gif" alt="The sloth with one eye open" /> | <img src="docs/media/face-awake.gif" alt="The sloth wide awake, blinking" /> | <img src="docs/media/face-bus.gif" alt="The bus countdown with a live dot" /> |
+| Nothing needs you. Leave the phone. | Someone you know wrote, or a deadline is close. It can wait until the bus. | Needs you today: a failed payment, a parcel arriving, a leaked key. | Minutes until your bus. Only **9:00 to 13:00**. |
+
+<p align="center">
+  <img src="docs/post/faces-real.jpg" alt="The three faces on the real LED matrix" width="100%" />
+</p>
 
 - **Asleep, breathing slowly:** nothing needs you. Leave the phone where it is.
 - **One eye open:** someone you've written to replied, or a deadline is close. It can wait until the bus.
 - **Wide awake, blinking:** something needs you today, such as a failed payment, a parcel arriving, a leaked key or a recruiter asking for something.
-- **Bus and a number:** minutes until the next 404 actually reaches Castlegar GAA, late buses and cancellations included. A dot in the top-right corner means the time is live.
+- **Bus and a number (9:00 to 13:00 only):** minutes until the next 404 actually reaches Castlegar GAA, late buses and cancellations included. A dot in the top-right corner means the time is live. At any other hour the matrix shows just the sloth.
 
 It never changes your mailbox. Read the mail on your phone and the sloth goes back to sleep by itself.
 
-Built for the [DEV Hacktoberfest Open-Source AI Challenge, Week 3: Slow and Steady](https://dev.to/challenges/hf26). MIT licensed.
+## Watch the AI work
+
+One command shows the whole decision, live, in your terminal: the email arriving, Gemma 4 thinking on the board, the code rules, and the flag the sloth raises.
+
+```bash
+python3 tools/demo.py watch
+```
+
+```
+00:31:02  📬  new email  Webinar starting in 10 minutes  from …@gmail.com
+          …  Gemma is thinking on the board, 34s
+00:31:36  🧠  Gemma 4 says  noise  (34s, on the board)
+00:31:36  ⚖️   code rules raise it to  needs_today  because an event is starting now
+00:31:36  🦥  FLAG → awake  WIDE AWAKE, it needs you today
+```
+
+Two ready-made emails make it change on cue. The steps are in the [demo guide](docs/DEMO.md).
+
+## How a night goes
+
+```mermaid
+sequenceDiagram
+  participant You
+  participant Sloth as UNO Q (Linux side)
+  participant Gemma as Gemma 4 E2B (same board)
+  participant Matrix as LED matrix
+  You->>Matrix: go to sleep, sloth is asleep
+  loop every few minutes
+    Sloth->>Sloth: read new unread Gmail (read-only)
+    Sloth->>Gemma: one email: sender, subject, preview
+    Gemma-->>Sloth: needs_today, soon, fyi or noise
+    Sloth->>Sloth: code rules can raise it, never lower it
+    Sloth->>Matrix: strongest unread level becomes the face
+  end
+  You->>You: glance at the face
+  You->>Sloth: read the mail on your phone
+  Sloth->>Matrix: back to sleep
+```
 
 ## Why it exists
+
+<p align="center"><img src="docs/post/board.jpg" alt="The Arduino UNO Q with the sloth on its LED matrix" width="380" /></p>
 
 I often wake up late. The moment I pick up my phone there are twenty notifications, most of them LinkedIn. Over three nights, **about 1 in 4 overnight emails needed me that morning**. Gmail's own Important label flagged a Trustpilot review request and a vendor's "[urgent]" incident notice, and it missed both of my failed electricity top-ups.
 
@@ -101,7 +177,7 @@ You need an Arduino UNO Q (the 4 GB one) on Wi-Fi, and `adb` on your computer (`
 |---|---|---|
 | `QUIET_FROM`, `WAKE_AT` | `00:30`, `07:00` | Matrix stays dark in between |
 | `POLL_MINUTES` | `5` | How often to check Gmail |
-| `BUS_FROM`, `BUS_TO` | `09:00`, `12:00` | When the countdown shows |
+| `BUS_FROM`, `BUS_TO` | `09:00`, `13:00` | The only hours the bus countdown shows; outside them it's just the sloth |
 | `BUS_WALK_MINUTES` | `0` | Count down to when you must leave, not to the bus |
 | `EXTRA_CONTACTS` | none | Comma-separated addresses that always count as people you've written to |
 | `TFI_API_KEY` | none | Live bus times; without it the countdown uses the timetable |
@@ -113,7 +189,7 @@ Get a free key at [developer.nationaltransport.ie](https://developer.nationaltra
 ```bash
 adb shell -t 'read -r -s -p "TFI API key: " K; echo; cd ~/ArduinoApps/morning-sloth && sed -i "/^TFI_API_KEY=/d" secrets.env && echo "TFI_API_KEY=$K" >> secrets.env && TMPDIR=/tmp arduino-app-cli app restart ~/ArduinoApps/morning-sloth'
 ```
-Every two minutes during bus hours the board downloads the national feed (about 500 KB as protobuf, read by `live.py` with no extra libraries). It picks out the 404's trips at your stop and applies each bus's delay, drops cancelled ones and adds extra ones. If the feed is down or more than 10 minutes old, the countdown falls back to the timetable and the corner dot goes out.
+Every two minutes during bus hours (9:00 to 13:00) the board downloads the national feed (about 500 KB as protobuf, read by `live.py` with no extra libraries). It picks out the 404's trips at your stop and applies each bus's delay, drops cancelled ones and adds extra ones. If the feed is down or more than 10 minutes old, the countdown falls back to the timetable and the corner dot goes out.
 
 ### Your own bus
 
@@ -129,7 +205,7 @@ python3 tools/bus_timetable.py gtfs 404 8460B5243201 > app/bus_timetable.json
 ```bash
 python3 -m unittest discover tests
 ```
-36 tests cover the rules, the setup cap, Irish summer time (including this Sunday's clock change), the bus timetable (including the October bank holiday), the live feed (protobuf decoding, late, cancelled, skipped and extra buses), the countdown frames and email previews. The model benchmark runs on the board: `python3 eval/bench.py <labelled.jsonl> <out dir> device`.
+40 tests (run on every push by the [Tests workflow](.github/workflows/tests.yml)) cover the rules, the setup cap, the 9:00 to 13:00 bus window, Irish summer time (including this Sunday's clock change), the bus timetable (including the October bank holiday), the live feed (protobuf decoding, late, cancelled, skipped and extra buses), the countdown frames and email previews. The model benchmark runs on the board: `python3 eval/bench.py <labelled.jsonl> <out dir> device`.
 
 ## Honest limits
 
@@ -152,6 +228,10 @@ app/                 the UNO Q app (App Lab layout)
   python/irishtime.py Irish time without tzdata
   sketch/            STM32 sketch: faces, breathing, blinking
   bus_timetable.json 404 at Castlegar GAA, cut from the TFI feed
+tools/demo.py        live terminal view and demo triggers
+tools/trigger.py     runs on the board to email itself a demo email
+docs/DEMO.md         how to film the sloth changing faces
+.github/workflows/   unit tests on every push
 tools/faces.py       the faces as ASCII art, generates sketch/faces.h
 tools/bus_timetable.py  cuts the GTFS feed down to one route at one stop
 eval/                benchmark and scoring scripts (data stays private)
